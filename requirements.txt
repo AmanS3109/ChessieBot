@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+langchain
+langchain-community
+langchain-text-splitters
+chromadb
+sentence-transformers
+transformers
+groq
+python-dotenv
+PyPDF2
+# faiss-cpu
+gtts
+pydantic
+python-multipart
+streamlit
