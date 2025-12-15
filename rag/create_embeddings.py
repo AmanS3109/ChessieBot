@@ -3,7 +3,7 @@ from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from rag.data_loader import load_all_stories
 
-DATA_PATH = "data/stories"
+DATA_PATH = "data/hindi_stories"
 DB_PATH = "data/processed/chromadb"
 
 def build_vector_store():
@@ -25,7 +25,7 @@ def build_vector_store():
 
     # 3️⃣ Create embeddings
     print("🔹 Creating embeddings using all-MiniLM-L6-v2 ...")
-    embedder = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    embedder = HuggingFaceEmbeddings(model_name="distiluse-base-multilingual-cased-v1")
 
     # 4️⃣ Store in ChromaDB
     print("🔹 Storing in ChromaDB ...")

@@ -6,7 +6,7 @@ langchain-text-splitters
 chromadb
 sentence-transformers
 transformers
-groq
+google-generativeai
 python-dotenv
 PyPDF2
 # faiss-cpu
@@ -14,3 +14,7 @@ gtts
 pydantic
 python-multipart
 streamlit
+groq
+edge-tts
+SpeechRecognition
+pyaudio
