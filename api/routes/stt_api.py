@@ -9,6 +9,7 @@ import speech_recognition as sr
 import tempfile
 import os
 from typing import Optional
+import difflib
 
 router = APIRouter()
 
@@ -105,6 +106,101 @@ async def speech_to_text(
                     detail=f"Could not understand audio in language: {language}"
                 )
         
+        # Post-process ASR output to correct common Hinglish/chess term mistakes
+        def normalize_stt_text(text: str) -> str:
+            import re
+            
+            # Direct replacements for common ASR errors (case-insensitive)
+            replacements = {
+                # English ASR errors
+                "pownds": "pawn",
+                "pawnds": "pawn",
+                "ponds": "pawn",
+                "pauns": "pawn",
+                "pawnz": "pawn",
+                "phone": "pawn",  # Common Hindi ASR error
+                "fone": "pawn",
+                
+                # Hindi Devanagari errors
+                "पॉन्ड्स": "pawn",
+                "पॉन्स": "pawn",
+                "फोन": "pawn",      # फोन (phone) → pawn
+                "पोर्न": "pawn",    # Common mis-transcription
+                "पौन": "pawn",
+                "प्यान": "pawn",
+                
+                # King variants
+                "किंग": "king",
+                "राजा": "king",
+                
+                # Queen variants
+                "क्वीन": "queen",
+                "रानी": "queen",
+                "क्वीं": "queen",
+                
+                # Rook variants
+                "रूक": "rook",
+                "हाथी": "rook",
+                
+                # Bishop variants
+                "बिशप": "bishop",
+                "ऊंट": "bishop",
+                
+                # Knight variants
+                "नाइट": "knight",
+                "घोड़ा": "knight",
+            
+                # Plant/plant-like misrecognitions -> pawn
+                "प्लांट": "pawn",
+                "प्लान्ट": "pawn",
+                "प्लांट्स": "pawn",
+                "प्लांटे": "pawn",
+                "plant": "pawn",
+                "प्लां": "pawn",
+            }
+
+            # Chess vocabulary for fuzzy matching
+            vocab = [
+                "king", "queen", "pawn", "rook", "bishop", "knight",
+                "check", "checkmate", "move", "board", "game", "castle",
+                "attack", "defend", "capture",
+            ]
+
+            # Apply direct replacements
+            out = text
+            for k, v in replacements.items():
+                if k.isascii():
+                    # Case-insensitive replacement for English
+                    pattern = re.compile(re.escape(k), re.IGNORECASE)
+                    out = pattern.sub(v, out)
+                else:
+                    # Exact replacement for Hindi/Devanagari
+                    out = out.replace(k, v)
+
+            # Token-level fuzzy correction for remaining English words
+            tokens = out.split()
+            corrected = []
+            for tok in tokens:
+                # only attempt fuzzy match for ascii tokens
+                try:
+                    tok_ascii = tok.encode('ascii')
+                    is_ascii = True
+                except Exception:
+                    is_ascii = False
+
+                if is_ascii and len(tok) > 2:
+                    # find closest vocab match
+                    match = difflib.get_close_matches(tok.lower(), vocab, n=1, cutoff=0.75)
+                    if match:
+                        corrected.append(match[0])
+                        continue
+                corrected.append(tok)
+
+            return " ".join(corrected)
+
+        if result_text:
+            result_text = normalize_stt_text(result_text)
+
         if not result_text:
             raise HTTPException(
                 status_code=400,

@@ -99,6 +99,8 @@ import asyncio
 import base64
 import edge_tts
 import speech_recognition as sr
+import difflib
+import re
 from io import BytesIO
 
 from rag.generator import generate_llm_response
@@ -152,6 +154,93 @@ def is_mostly_english(text: str) -> bool:
     return any(k in text for k in keywords)
 
 
+def normalize_stt_text(text: str) -> str:
+    """Post-process speech recognition output to fix common Hinglish/chess-term errors."""
+    # Direct replacements for common ASR errors (case-insensitive)
+    replacements = {
+        # English ASR errors
+        "pownds": "pawn",
+        "pawnds": "pawn",
+        "ponds": "pawn",
+        "pauns": "pawn",
+        "pawnz": "pawn",
+            "phone": "pawn",  # Common Hindi/English ASR error
+            "fone": "pawn",
+            "plant": "pawn",  # english 'plant' sometimes recognized
+        
+        # Hindi Devanagari errors
+        "पॉन्ड्स": "pawn",
+        "पॉन्स": "pawn",
+        "फोन": "pawn",      # फोन (phone) → pawn
+        "पोर्न": "pawn",    # Common mis-transcription
+        "पौन": "pawn",
+        "प्यान": "pawn",
+            "प्लांट": "pawn",   # प्लांट (plant) → pawn (common mishear)
+            "प्लान्ट": "pawn",
+            "प्लांटे": "pawn",
+            "प्लांट्स": "pawn",
+        
+        # King variants
+        "किंग": "king",
+        "राजा": "king",
+        
+        # Queen variants
+        "क्वीन": "queen",
+        "रानी": "queen",
+        "क्वीं": "queen",
+        
+        # Rook variants
+        "रूक": "rook",
+        "हाथी": "rook",
+        
+        # Bishop variants
+        "बिशप": "bishop",
+        "ऊंट": "bishop",
+        
+        # Knight variants
+        "नाइट": "knight",
+        "घोड़ा": "knight",
+    }
+
+    # Chess vocabulary for fuzzy matching
+    vocab = [
+        "king", "queen", "pawn", "rook", "bishop", "knight",
+        "check", "checkmate", "move", "board", "game", "castle",
+        "attack", "defend", "capture",
+    ]
+
+    # Apply direct replacements (case-insensitive for English)
+    out = text
+    for k, v in replacements.items():
+        if k.isascii():
+            # Case-insensitive replacement for English
+            import re
+            pattern = re.compile(re.escape(k), re.IGNORECASE)
+            out = pattern.sub(v, out)
+        else:
+            # Exact replacement for Hindi/Devanagari
+            out = out.replace(k, v)
+
+    # Token-level fuzzy correction for remaining English words
+    tokens = out.split()
+    corrected = []
+    for tok in tokens:
+        try:
+            tok.encode('ascii')
+            is_ascii = True
+        except Exception:
+            is_ascii = False
+
+        if is_ascii and len(tok) > 2:  # Only fuzzy match longer words
+            match = difflib.get_close_matches(tok.lower(), vocab, n=1, cutoff=0.75)
+            if match:
+                corrected.append(match[0])
+                continue
+        corrected.append(tok)
+
+    return " ".join(corrected)
+
+
 def listen_to_microphone():
     """
     Capture audio from microphone and convert to text using Google's speech recognition.
@@ -170,15 +259,17 @@ def listen_to_microphone():
         st.info("🔄 Processing your speech...")
         
         # Try to recognize speech using Google Speech Recognition
-        # First try Hindi, then English
+        # First try Hindi, then English. Apply post-processing to reduce Hinglish errors.
         try:
             text = recognizer.recognize_google(audio, language="hi-IN")
+            text = normalize_stt_text(text)
             st.success(f"✅ You said (Hindi): {text}")
             return text
         except:
             # If Hindi fails, try English
             try:
                 text = recognizer.recognize_google(audio, language="en-IN")
+                text = normalize_stt_text(text)
                 st.success(f"✅ You said (English): {text}")
                 return text
             except:
@@ -314,6 +405,11 @@ if user_input:
 
             answer = response.get("answer", "Unknown")
             explanation = response.get("explanation", "")
+            normalized_query = response.get("normalized_query", user_input)
+            
+            # Show normalized query if different from input (for transparency)
+            if normalized_query != user_input:
+                st.caption(f"🔄 Understood as: _{normalized_query}_")
 
             st.markdown(f"### 🎯 {answer}")
 

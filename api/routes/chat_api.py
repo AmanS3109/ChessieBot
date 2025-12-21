@@ -16,16 +16,30 @@ class ChatRequest(BaseModel):
     explain: Optional[bool] = False
 
 
+class ChatResponse(BaseModel):
+    answer: str
+    explanation: str
+    normalized_query: str
+    original_query: str
+
+
 class RetrieveRequest(BaseModel):
     question: str
     top_k: Optional[int] = 5
 
 
-@router.post("/chat")
+@router.post("/chat", response_model=ChatResponse)
 async def chat_with_buddy(request: ChatRequest):
     """Return a story-grounded one-word answer (and explanation if requested).
 
     Runs the synchronous RAG pipeline in a thread to avoid blocking the event loop.
+    Now includes query normalization for Hindi/Hinglish input.
+    
+    Response includes:
+    - answer: One-word or short answer
+    - explanation: Story-grounded explanation (if explain=True)
+    - normalized_query: Canonical Hinglish question
+    - original_query: Original user input
     """
     try:
         result = await asyncio.to_thread(generate_response, request.question, request.explain)
