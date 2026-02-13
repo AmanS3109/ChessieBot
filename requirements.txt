@@ -1,20 +1,44 @@
+# ChessieBot Requirements
+# Core Framework
 fastapi
-uvicorn
+uvicorn[standard]
+pydantic
+
+# LangChain & RAG
 langchain
 langchain-community
 langchain-text-splitters
 chromadb
 sentence-transformers
+
+# LLM & AI
+groq
 transformers
 google-generativeai
-python-dotenv
-PyPDF2
-# faiss-cpu
+
+# Whisper Transcription (FREE, local)
+faster-whisper
+ffmpeg-python
+
+# Video Download
+yt-dlp
+
+# Text-to-Speech
 gtts
-pydantic
-python-multipart
-streamlit
-groq
 edge-tts
+
+# Speech-to-Text
 SpeechRecognition
 
+# Utilities
+python-dotenv
+python-multipart
+PyPDF2
+
+# Optional: Streamlit UI
+streamlit
+
+# Testing
+pytest
+pytest-asyncio
+httpx

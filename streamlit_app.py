@@ -1,110 +1,15 @@
-# # chess_buddy_app.py
-# import streamlit as st
-# from rag.generator import generate_llm_response
-
-# st.set_page_config(
-#     page_title="Chess Buddy 🧠♟️",
-#     page_icon="♟️",
-#     layout="centered"
-# )
-
-# # --- Title and Header ---
-# st.title("🤖 Chess Buddy — Your Magical Chess Friend!")
-# st.markdown("Ask me anything about chess, lessons, or your story! 🌟")
-
-# # --- Initialize session state for chat history ---
-# if "messages" not in st.session_state:
-#     st.session_state.messages = []
-
-# if "show_explanation" not in st.session_state:
-#     st.session_state.show_explanation = {}
-
-# # --- Display chat history ---
-# for idx, message in enumerate(st.session_state.messages):
-#     with st.chat_message(message["role"]):
-#         if message["role"] == "assistant":
-#             # Display one-word answer in large font
-#             st.markdown(f"### 🎯 {message['answer']}")
-            
-#             # Create unique key for each message's explain button
-#             explain_key = f"explain_{idx}"
-            
-#             # Show explanation button
-#             if st.button("💡 Explain", key=explain_key):
-#                 st.session_state.show_explanation[idx] = True
-            
-#             # Show explanation if button was clicked
-#             if st.session_state.show_explanation.get(idx, False):
-#                 st.markdown("---")
-#                 st.markdown("**Explanation:**")
-#                 st.markdown(message.get('explanation', 'No explanation available.'))
-#         else:
-#             st.markdown(message["content"])
-
-# # --- User input area ---
-# user_input = st.chat_input("Type your question here...")
-
-# if user_input:
-#     # Add user message to chat history
-#     st.session_state.messages.append({"role": "user", "content": user_input})
-#     with st.chat_message("user"):
-#         st.markdown(user_input)
-
-#     # --- Generate AI response ---
-#     with st.chat_message("assistant"):
-#         with st.spinner("Thinking like a Grandmaster... 🤔"):
-#             response = generate_llm_response(user_input)
-            
-#             # Display one-word answer in large font
-#             if isinstance(response, dict):
-#                 answer = response.get('answer', 'Unknown')
-#                 explanation = response.get('explanation', '')
-                
-#                 st.markdown(f"### 🎯 {answer}")
-                
-#                 # Create unique key for new message
-#                 new_idx = len(st.session_state.messages)
-#                 explain_key = f"explain_{new_idx}"
-                
-#                 # Show explanation button
-#                 if st.button("💡 Explain", key=explain_key):
-#                     st.session_state.show_explanation[new_idx] = True
-                
-#                 # Show explanation if button was clicked
-#                 if st.session_state.show_explanation.get(new_idx, False):
-#                     st.markdown("---")
-#                     st.markdown("**Explanation:**")
-#                     st.markdown(explanation)
-                
-#                 # Add to chat history
-#                 st.session_state.messages.append({
-#                     "role": "assistant", 
-#                     "answer": answer,
-#                     "explanation": explanation
-#                 })
-#             else:
-#                 # Fallback for old response format
-#                 st.markdown(response)
-#                 st.session_state.messages.append({"role": "assistant", "content": response, "answer": response, "explanation": ""})
-
-
-
-# chess_buddy_app.py
-# streamlit_app.py
-# streamlit_app.py
-# streamlit_app.py
 import streamlit as st
 import tempfile
 import asyncio
 import base64
-import edge_tts
-import speech_recognition as sr
-import difflib
-import re
-from io import BytesIO
+import requests
+import json
+import time
 
-from rag.generator import generate_llm_response
-
+# -------------------------------
+# Configuration
+# -------------------------------
+API_BASE_URL = "http://localhost:8080/api"
 
 # -------------------------------
 # Page Config
@@ -116,326 +21,270 @@ st.set_page_config(
 )
 
 st.title("🤖 Chess Buddy — Your Magical Chess Friend!")
-st.markdown("Ask me anything about chess, lessons, or your story! 🌟")
-
 
 # -------------------------------
-# Voice Configuration
+# API Client Helpers
 # -------------------------------
-HINDI_VOICE = "hi-IN-MadhurNeural"
-ENGLISH_VOICE = "en-IN-NeerjaNeural"
+def check_api_health():
+    """Check if API is running."""
+    try:
+        response = requests.get("http://localhost:8080/health", timeout=2)
+        return response.status_code == 200
+    except:
+        return False
 
+def api_chat(question, language="hinglish"):
+    """Call Chat API."""
+    try:
+        response = requests.post(f"{API_BASE_URL}/chat", json={
+            "question": question,
+            "explain": True
+        })
+        if response.status_code == 200:
+            return response.json()
+        return {"answer": "Error", "explanation": f"API Error: {response.status_code}"}
+    except Exception as e:
+        return {"answer": "Error", "explanation": f"Connection Error: {str(e)}"}
+
+def api_process_video(url):
+    """Call Video Process API."""
+    try:
+        response = requests.post(f"{API_BASE_URL}/video/process", json={"url": url})
+        if response.status_code == 200:
+            return response.json()
+        return {"status": "error", "message": f"API Error: {response.text}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+def api_video_chat(video_id, question, language="hinglish"):
+    """Call Video Chat API."""
+    try:
+        response = requests.post(f"{API_BASE_URL}/video/chat", json={
+            "video_id": video_id,
+            "question": question,
+            "language": language
+        })
+        if response.status_code == 200:
+            return response.json()
+        return {"answer": "Error", "explanation": f"API Error: {response.text}"}
+    except Exception as e:
+        return {"answer": "Error", "explanation": str(e)}
+
+def api_video_explain(video_id, topic, mode="full", language="hinglish"):
+    """Call Video Explain API."""
+    try:
+        response = requests.post(f"{API_BASE_URL}/video/explain", json={
+            "video_id": video_id,
+            "topic": topic,
+            "mode": mode,
+            "language": language
+        })
+        if response.status_code == 200:
+            return response.json()
+        return {"explanation": f"API Error: {response.text}"}
+    except Exception as e:
+        return {"explanation": str(e)}
+
+def api_get_tts_audio(text, language="auto"):
+    """Get TTS Audio from API."""
+    try:
+        response = requests.post(f"{API_BASE_URL}/tts", json={
+            "text": text,
+            "language": language
+        })
+        if response.status_code == 200:
+            return response.content
+        return None
+    except:
+        return None
+
+# -------------------------------
+# UI Components
+# -------------------------------
+def autoplay_audio(audio_bytes):
+    """Play audio bytes automatically."""
+    if not audio_bytes: return
+    b64 = base64.b64encode(audio_bytes).decode()
+    st.markdown(f'<audio autoplay><source src="data:audio/mp3;base64,{b64}"></audio>', unsafe_allow_html=True)
 
 # -------------------------------
 # Session State
 # -------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
-if "show_explanation" not in st.session_state:
-    st.session_state.show_explanation = {}
-
-if "spoken_answers" not in st.session_state:
-    st.session_state.spoken_answers = set()
-
-if "spoken_explanations" not in st.session_state:
-    st.session_state.spoken_explanations = set()
-
+if "video_messages" not in st.session_state:
+    st.session_state.video_messages = []
+if "current_video_id" not in st.session_state:
+    st.session_state.current_video_id = None
+if "language" not in st.session_state:
+    st.session_state.language = "hinglish"
 
 # -------------------------------
-# Helpers
+# Sidebar
 # -------------------------------
-def is_mostly_english(text: str) -> bool:
-    keywords = [
-        "king", "queen", "pawn", "rook", "bishop", "knight",
-        "game", "move", "step", "board", "check"
-    ]
-    text = text.lower()
-    return any(k in text for k in keywords)
-
-
-def normalize_stt_text(text: str) -> str:
-    """Post-process speech recognition output to fix common Hinglish/chess-term errors."""
-    # Direct replacements for common ASR errors (case-insensitive)
-    replacements = {
-        # English ASR errors
-        "pownds": "pawn",
-        "pawnds": "pawn",
-        "ponds": "pawn",
-        "pauns": "pawn",
-        "pawnz": "pawn",
-            "phone": "pawn",  # Common Hindi/English ASR error
-            "fone": "pawn",
-            "plant": "pawn",  # english 'plant' sometimes recognized
-        
-        # Hindi Devanagari errors
-        "पॉन्ड्स": "pawn",
-        "पॉन्स": "pawn",
-        "फोन": "pawn",      # फोन (phone) → pawn
-        "पोर्न": "pawn",    # Common mis-transcription
-        "पौन": "pawn",
-        "प्यान": "pawn",
-            "प्लांट": "pawn",   # प्लांट (plant) → pawn (common mishear)
-            "प्लान्ट": "pawn",
-            "प्लांटे": "pawn",
-            "प्लांट्स": "pawn",
-        
-        # King variants
-        "किंग": "king",
-        "राजा": "king",
-        
-        # Queen variants
-        "क्वीन": "queen",
-        "रानी": "queen",
-        "क्वीं": "queen",
-        
-        # Rook variants
-        "रूक": "rook",
-        "हाथी": "rook",
-        
-        # Bishop variants
-        "बिशप": "bishop",
-        "ऊंट": "bishop",
-        
-        # Knight variants
-        "नाइट": "knight",
-        "घोड़ा": "knight",
-    }
-
-    # Chess vocabulary for fuzzy matching
-    vocab = [
-        "king", "queen", "pawn", "rook", "bishop", "knight",
-        "check", "checkmate", "move", "board", "game", "castle",
-        "attack", "defend", "capture",
-    ]
-
-    # Apply direct replacements (case-insensitive for English)
-    out = text
-    for k, v in replacements.items():
-        if k.isascii():
-            # Case-insensitive replacement for English
-            import re
-            pattern = re.compile(re.escape(k), re.IGNORECASE)
-            out = pattern.sub(v, out)
-        else:
-            # Exact replacement for Hindi/Devanagari
-            out = out.replace(k, v)
-
-    # Token-level fuzzy correction for remaining English words
-    tokens = out.split()
-    corrected = []
-    for tok in tokens:
-        try:
-            tok.encode('ascii')
-            is_ascii = True
-        except Exception:
-            is_ascii = False
-
-        if is_ascii and len(tok) > 2:  # Only fuzzy match longer words
-            match = difflib.get_close_matches(tok.lower(), vocab, n=1, cutoff=0.75)
-            if match:
-                corrected.append(match[0])
-                continue
-        corrected.append(tok)
-
-    return " ".join(corrected)
-
-
-def listen_to_microphone():
-    """
-    Capture audio from microphone and convert to text using Google's speech recognition.
-    Returns the transcribed text or None if recognition fails.
-    """
-    recognizer = sr.Recognizer()
+with st.sidebar:
+    st.header("⚙️ Settings")
     
-    try:
-        with sr.Microphone() as source:
-            st.info("🎤 Listening... Speak now!")
-            # Adjust for ambient noise
-            recognizer.adjust_for_ambient_noise(source, duration=1)
-            # Listen for audio
-            audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
-            
-        st.info("🔄 Processing your speech...")
-        
-        # Try to recognize speech using Google Speech Recognition
-        # First try Hindi, then English. Apply post-processing to reduce Hinglish errors.
-        try:
-            text = recognizer.recognize_google(audio, language="hi-IN")
-            text = normalize_stt_text(text)
-            st.success(f"✅ You said (Hindi): {text}")
-            return text
-        except:
-            # If Hindi fails, try English
-            try:
-                text = recognizer.recognize_google(audio, language="en-IN")
-                text = normalize_stt_text(text)
-                st.success(f"✅ You said (English): {text}")
-                return text
-            except:
-                st.error("❌ Could not understand audio. Please try again.")
-                return None
-                
-    except sr.WaitTimeoutError:
-        st.warning("⏱️ No speech detected. Please try again.")
-        return None
-    except Exception as e:
-        st.error(f"❌ Error: {str(e)}")
-        return None
-
-
-def normalize_for_tts(text: str) -> str:
-    replacements = {
-        "kise": "kisse",
-        "kon": "kaun",
-        "kehte": "kehtey",
-        "kyun": "kyon",
-        "raja": "raajaa",
-        "bulate": "bulaate",
-    }
-    out = text.lower()
-    for k, v in replacements.items():
-        out = out.replace(k, v)
-    return out
-
-
-async def _tts_async(text: str, voice: str, path: str):
-    communicate = edge_tts.Communicate(text, voice)
-    await communicate.save(path)
-
-
-def speak_autoplay(text: str):
-    if not text:
-        return
-
-    text = normalize_for_tts(text)
-    voice = ENGLISH_VOICE if is_mostly_english(text) else HINDI_VOICE
-
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-    tmp.close()
-
-    asyncio.run(_tts_async(text, voice, tmp.name))
-
-    audio_bytes = open(tmp.name, "rb").read()
-    audio_base64 = base64.b64encode(audio_bytes).decode()
-
-    st.markdown(
-        f"""
-        <audio autoplay>
-            <source src="data:audio/mp3;base64,{audio_base64}">
-        </audio>
-        """,
-        unsafe_allow_html=True
-    )
-
+    # API Status Indicator
+    api_online = check_api_health()
+    if api_online:
+        st.success("✅ API Connected")
+    else:
+        st.error("❌ API Offline")
+        st.caption("Run: `python -m uvicorn main:app --port 8000`")
+    
+    # Language Selector
+    lang_map = {"English": "en", "Hindi": "hi", "Hinglish": "hinglish"}
+    selected_lang = st.selectbox("Language / भाषा", list(lang_map.keys()), index=2)
+    st.session_state.language = lang_map[selected_lang]
+    
+    st.divider()
+    if st.button("🗑️ Clear History"):
+        st.session_state.messages = []
+        st.session_state.video_messages = []
+        st.rerun()
 
 # -------------------------------
-# Display Chat History
+# TABS Interface
 # -------------------------------
-for idx, message in enumerate(st.session_state.messages):
-    with st.chat_message(message["role"]):
+tab1, tab2 = st.tabs(["📖 Story Mode", "📺 Video Tutor"])
 
-        if message["role"] == "assistant":
-            answer = message["answer"]
-            explanation = message["explanation"]
+# ==========================================
+# TAB 1: STORY MODE
+# ==========================================
+with tab1:
+    st.markdown("### Ask me about Chess Stories! 🌟")
+    
+    # Display history
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            if msg["role"] == "assistant":
+                st.markdown(f"**{msg['answer']}**")
+                if msg.get("explanation"):
+                    with st.expander("Explanation"):
+                        st.markdown(msg["explanation"])
+            else:
+                st.markdown(msg["content"])
 
-            st.markdown(f"### 🎯 {answer}")
-
-            # 🔊 Speak answer ONCE
-            ans_key = f"answer_{idx}"
-            if ans_key not in st.session_state.spoken_answers:
-                speak_autoplay(answer)
-                st.session_state.spoken_answers.add(ans_key)
-
-            # 💡 Explain button → ONLY set state
-            if st.button("💡 Explain", key=f"explain_{idx}"):
-                st.session_state.show_explanation[idx] = True
-
-            # 🔑 Speak explanation WHEN it becomes visible
-            if st.session_state.show_explanation.get(idx, False):
-                st.markdown("---")
-                st.markdown("**Explanation:**")
-                st.markdown(explanation)
-
-                exp_key = f"exp_{idx}"
-                if exp_key not in st.session_state.spoken_explanations:
-                    speak_autoplay(explanation)
-                    st.session_state.spoken_explanations.add(exp_key)
-
+    # Input
+    user_input = st.chat_input("Ask about the King, Queen, or Stories...", key="story_input")
+    if user_input:
+        if not api_online:
+            st.error("⚠️ API is offline. Please start the server.")
         else:
-            st.markdown(message["content"])
-
-
-# -------------------------------
-# User Input
-# -------------------------------
-st.markdown("### 💬 Ask Your Question")
-
-# Create two columns for input methods
-col1, col2 = st.columns([4, 1])
-
-with col1:
-    user_input = st.text_input("Type your question here...", key="text_input", label_visibility="collapsed", placeholder="Type your question or use the microphone 🎤")
-
-with col2:
-    if st.button("🎤 Speak", use_container_width=True):
-        voice_input = listen_to_microphone()
-        if voice_input:
-            user_input = voice_input
-            # Store in session state to trigger processing
-            st.session_state.pending_question = voice_input
-
-# Check if there's a pending question from voice input
-if "pending_question" in st.session_state:
-    user_input = st.session_state.pending_question
-    del st.session_state.pending_question
-
-if user_input:
-    st.session_state.messages.append({
-        "role": "user",
-        "content": user_input
-    })
-
-    with st.chat_message("user"):
-        st.markdown(user_input)
-
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking like a Grandmaster... 🤔"):
-            response = generate_llm_response(user_input)
-
-            answer = response.get("answer", "Unknown")
-            explanation = response.get("explanation", "")
-            normalized_query = response.get("normalized_query", user_input)
+            # User message
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            with st.chat_message("user"):
+                st.markdown(user_input)
             
-            # Show normalized query if different from input (for transparency)
-            if normalized_query != user_input:
-                st.caption(f"🔄 Understood as: _{normalized_query}_")
+            # Assistant response
+            with st.chat_message("assistant"):
+                with st.spinner("Asking Chess Buddy..."):
+                    resp = api_chat(user_input, st.session_state.language)
+                    
+                    answer = resp.get("answer", "Error")
+                    expl = resp.get("explanation", "")
+                    
+                    st.markdown(f"**{answer}**")
+                    if expl:
+                        with st.expander("Explanation"):
+                            st.markdown(expl)
+                    
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "answer": answer,
+                        "explanation": expl
+                    })
+                    
+                    # Audio
+                    audio_bytes = api_get_tts_audio(answer)
+                    autoplay_audio(audio_bytes)
 
-            st.markdown(f"### 🎯 {answer}")
 
-            new_idx = len(st.session_state.messages)
+# ==========================================
+# TAB 2: VIDEO TUTOR
+# ==========================================
+with tab2:
+    st.markdown("### 🎥 Watch & Learn")
+    
+    # Video Process Section
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        video_url = st.text_input("🔗 Paste YouTube URL:", placeholder="https://youtube.com/...")
+    with col2:
+        process_btn = st.button("🚀 Process", disabled=not api_online, use_container_width=True)
+    
+    if process_btn and video_url:
+        with st.spinner("Downloading & Analyzing..."):
+            result = api_process_video(video_url)
+            if result.get("status") == "success":
+                st.session_state.current_video_id = result.get("video_id")
+                st.success(f"✅ Ready! Video ID: {result.get('video_id')}")
+            else:
+                st.error(f"❌ Error: {result.get('message')}")
 
-            # 🔊 Speak answer ONCE
-            ans_key = f"answer_{new_idx}"
-            if ans_key not in st.session_state.spoken_answers:
-                speak_autoplay(answer)
-                st.session_state.spoken_answers.add(ans_key)
+    st.divider()
 
-            if st.button("💡 Explain", key=f"explain_{new_idx}"):
-                st.session_state.show_explanation[new_idx] = True
+    # Chat Interface
+    if st.session_state.current_video_id:
+        st.info("Ask questions or click buttons for explanations!")
+        
+        # Helper Buttons for Explain API
+        c1, c2, c3 = st.columns(3)
+        if c1.button("🤔 What is this?"):
+            with st.spinner("Thinking..."):
+                res = api_video_explain(st.session_state.current_video_id, "current situation", "what", st.session_state.language)
+                st.session_state.video_messages.append({"role": "assistant", "answer": "Explanation (What)", "explanation": res.get("explanation")})
+        
+        if c2.button("🧠 Why this move?"):
+            with st.spinner("Thinking..."):
+                res = api_video_explain(st.session_state.current_video_id, "latest move", "why", st.session_state.language)
+                st.session_state.video_messages.append({"role": "assistant", "answer": "Explanation (Why)", "explanation": res.get("explanation")})
+        
+        if c3.button("📝 Key Concepts"):
+            with st.spinner("Extracting..."):
+                res = requests.get(f"{API_BASE_URL}/video/concepts/{st.session_state.current_video_id}").json()
+                concepts = "\n".join([f"- **{c['name']}**: {c.get('description','')}" for c in res.get('concepts', [])])
+                st.session_state.video_messages.append({"role": "assistant", "answer": "Key Concepts", "explanation": concepts})
 
-            if st.session_state.show_explanation.get(new_idx, False):
-                st.markdown("---")
-                st.markdown("**Explanation:**")
-                st.markdown(explanation)
+        # History
+        for msg in st.session_state.video_messages:
+            with st.chat_message(msg["role"]):
+                if msg["role"] == "assistant":
+                    st.markdown(f"**{msg['answer']}**")
+                    if msg.get("explanation"):
+                        st.markdown(f"_{msg['explanation']}_")
+                else:
+                    st.markdown(msg["content"])
 
-                exp_key = f"exp_{new_idx}"
-                if exp_key not in st.session_state.spoken_explanations:
-                    speak_autoplay(explanation)
-                    st.session_state.spoken_explanations.add(exp_key)
+        # Input
+        vid_input = st.chat_input("Ask about the video...", key="video_input")
+        if vid_input:
+            if not api_online:
+                st.error("⚠️ API is offline.")
+            else:
+                st.session_state.video_messages.append({"role": "user", "content": vid_input})
+                with st.chat_message("user"):
+                    st.markdown(vid_input)
+                
+                with st.chat_message("assistant"):
+                    with st.spinner("Analyzing..."):
+                        resp = api_video_chat(st.session_state.current_video_id, vid_input, st.session_state.language)
+                        
+                        ans = resp.get("answer", "Error")
+                        exp = resp.get("explanation", "")
+                        
+                        st.markdown(f"**{ans}**")
+                        st.markdown(f"_{exp}_")
+                        
+                        st.session_state.video_messages.append({
+                            "role": "assistant",
+                            "answer": ans,
+                            "explanation": exp
+                        })
+                        
+                        audio_bytes = api_get_tts_audio(ans)
+                        autoplay_audio(audio_bytes)
+    else:
+        st.markdown("Waiting for video...")
 
-            st.session_state.messages.append({
-                "role": "assistant",
-                "answer": answer,
-                "explanation": explanation
-            })
