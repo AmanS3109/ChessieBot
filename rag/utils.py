@@ -7,7 +7,7 @@ from rag.generator import generate_llm_response
 from rag.query_normalizer import normalize_query
 
 
-def generate_response(question: str, explain: Optional[bool] = False) -> Dict[str, str]:
+def generate_response(question: str, explain: Optional[bool] = False, language: str = "hinglish") -> Dict[str, str]:
     """Wrapper used by the API to run the RAG pipeline.
 
     This function normalizes the query before processing to handle Hindi/Hinglish input.
@@ -15,6 +15,7 @@ def generate_response(question: str, explain: Optional[bool] = False) -> Dict[st
     Args:
         question: user's question (raw Hindi/Hinglish)
         explain: if True, request a fuller story-grounded explanation
+        language: target language for the response (default: hinglish)
 
     Returns:
         dict with keys: 'answer', 'explanation', and 'normalized_query'
@@ -23,7 +24,7 @@ def generate_response(question: str, explain: Optional[bool] = False) -> Dict[st
     normalized_question = normalize_query(question)
     
     # Step 2: Generate response using normalized query
-    response = generate_llm_response(normalized_question, explain=explain)
+    response = generate_llm_response(normalized_question, explain=explain, language=language)
     
     # Step 3: Add normalized query to response for transparency
     response["normalized_query"] = normalized_question

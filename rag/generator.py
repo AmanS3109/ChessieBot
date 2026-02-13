@@ -618,7 +618,10 @@ Rewritten question:
 # -------------------------------
 # Main Generator Function
 # -------------------------------
-def generate_llm_response(user_query: str, explain: bool = False):
+# -------------------------------
+# Main Generator Function
+# -------------------------------
+def generate_llm_response(user_query: str, explain: bool = False, language: str = "hinglish"):
     """
     Option 2 + Query Rewriting (Groq):
     - LLM self-verifies answers by quoting the story
@@ -636,10 +639,17 @@ def generate_llm_response(user_query: str, explain: bool = False):
     if not relevant_chunks or len(relevant_chunks) == 0:
         return {
             "answer": "Unknown",
-            "explanation": "Iska clear mention story mein nahi mila 📘"
+            "explanation": "Iska clear mention story mein nahi mila 📘" if language == "hinglish" else "I couldn't find a clear mention of this in the story 📘"
         }
 
     context = "\n\n---\n\n".join(relevant_chunks)
+
+    # Language-specific instructions
+    lang_instruction = "Use natural Hinglish."
+    if language == "en":
+        lang_instruction = "Respond in simple, kid-friendly English."
+    elif language == "hi":
+        lang_instruction = "Respond in simple Hindi (Devanagari)."
 
     # 3️⃣ Unified prompt (ANSWER + PROOF)
     prompt = f"""
@@ -712,7 +722,7 @@ PROOF: Story me iska zikr nahi hai
 STRICT OUTPUT FORMAT (NO EXTRA WORDS)
 ━━━━━━━━━━━━━━━━━━━━━━
 
-ANSWER: <short answer only>
+ANSWER: <short answer only ({language})>
 PROOF: "<exact sentence(s) copied from the story>"
 
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -734,7 +744,7 @@ Question:
                     "content": (
                         "You are a strict story-grounded assistant for kids. "
                         "Never invent facts. Always quote the story as proof. "
-                        "Use natural Hinglish."
+                        f"{lang_instruction}"
                     ),
                 },
                 {"role": "user", "content": prompt},
