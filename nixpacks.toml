@@ -1,8 +1,8 @@
 [phases.setup]
-nixPkgs = ["python311", "ffmpeg"]
+nixPkgs = ["ffmpeg"]
 
-[phases.build]
-cmds = ["python -m venv .venv", ". .venv/bin/activate", "pip install -r requirements.txt"]
+[phases.install]
+cmds = ["pip install --no-cache-dir -r requirements.txt"]
 
 [start]
-cmd = ". .venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port $PORT"
+cmd = "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"

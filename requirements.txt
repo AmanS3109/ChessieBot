@@ -11,10 +11,8 @@ langchain-text-splitters
 chromadb
 sentence-transformers
 
-# LLM & AI
+# LLM (Groq only — Google Gemini is NOT used)
 groq
-transformers
-google-generativeai
 
 # Whisper Transcription (FREE, local)
 faster-whisper
@@ -34,11 +32,3 @@ SpeechRecognition
 python-dotenv
 python-multipart
 PyPDF2
-
-# Optional: Streamlit UI
-streamlit
-
-# Testing
-pytest
-pytest-asyncio
-httpx
