@@ -1,4 +1,6 @@
-# ChessieBot Requirements
+# ChessieBot Requirements (Production)
+# NOTE: torch is installed separately in Dockerfile (CPU-only)
+
 # Core Framework
 fastapi
 uvicorn[standard]
@@ -11,10 +13,10 @@ langchain-text-splitters
 chromadb
 sentence-transformers
 
-# LLM (Groq only — Google Gemini is NOT used)
+# LLM (Groq only)
 groq
 
-# Whisper Transcription (FREE, local)
+# Whisper Transcription (local, free)
 faster-whisper
 ffmpeg-python
 
