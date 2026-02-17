@@ -62,7 +62,7 @@ RETRIEVAL_SCORE_THRESHOLD = 0.5
 # ================================
 API_HOST = "0.0.0.0"
 API_PORT = 8000
-CORS_ORIGINS = ["*"]  # Restrict in production
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")  # Set in Railway for production
 
 # ================================
 # Error Messages (Bilingual)

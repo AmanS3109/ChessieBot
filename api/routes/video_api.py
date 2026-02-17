@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, List, Literal
 import uuid
+import asyncio
 
 # Import services
 from services.video_processor import process_video, cleanup_temp_files
@@ -81,7 +82,16 @@ async def process_video_endpoint(request: VideoProcessRequest):
     - **url**: Video URL (YouTube, etc.)
     - **force_refresh**: If true, bypass cache and reprocess
     """
-    result = process_video(request.url, force_refresh=request.force_refresh)
+    try:
+        # Run in executor to avoid blocking the async event loop
+        # (yt-dlp download + Whisper transcription can take several minutes)
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: process_video(request.url, force_refresh=request.force_refresh)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Video processing failed: {str(e)}")
     
     if result.get("status") == "error":
         raise HTTPException(status_code=500, detail=result.get("message"))
