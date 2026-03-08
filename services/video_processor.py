@@ -1,5 +1,6 @@
 # services/video_processor.py - Enhanced Video Processing with Caching
 import os
+import re
 import yt_dlp
 from faster_whisper import WhisperModel
 from typing import Dict, Optional
@@ -10,6 +11,15 @@ from config import (
     WHISPER_COMPUTE_TYPE, DOWNLOAD_TIMEOUT
 )
 from services.cache_service import get_cached_transcript, cache_transcript
+
+# Try to import youtube-transcript-api
+try:
+    from youtube_transcript_api import YouTubeTranscriptApi
+    HAS_TRANSCRIPT_API = True
+    print("✅ youtube-transcript-api available")
+except ImportError:
+    HAS_TRANSCRIPT_API = False
+    print("⚠️ youtube-transcript-api not installed, using yt-dlp + Whisper only")
 
 # Ensure temp directory exists
 os.makedirs(TEMP_AUDIO_DIR, exist_ok=True)
@@ -35,6 +45,57 @@ def get_whisper_model() -> WhisperModel:
 def generate_video_id(video_url: str) -> str:
     """Generate a consistent ID for a video URL."""
     return hashlib.md5(video_url.encode()).hexdigest()[:12]
+
+
+def extract_youtube_id(url: str) -> Optional[str]:
+    """Extract YouTube video ID from various URL formats."""
+    patterns = [
+        r'(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})',
+        r'(?:youtube\.com/shorts/)([a-zA-Z0-9_-]{11})',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+
+def get_transcript_via_api(video_url: str) -> Dict[str, str]:
+    """
+    Get transcript using youtube-transcript-api (no download needed).
+    This bypasses YouTube's bot detection entirely.
+    """
+    youtube_id = extract_youtube_id(video_url)
+    if not youtube_id:
+        return {"status": "error", "message": "Could not extract YouTube video ID from URL"}
+    
+    try:
+        print(f"   📝 Fetching transcript via YouTube API for: {youtube_id}")
+        
+        # Try to get transcript - prefer English, Hindi, then auto-generated
+        ytt_api = YouTubeTranscriptApi()
+        transcript_list = ytt_api.fetch(youtube_id)
+        
+        # Combine all transcript segments into full text
+        full_transcript = " ".join([entry.text for entry in transcript_list])
+        
+        if not full_transcript.strip():
+            return {"status": "error", "message": "Transcript is empty"}
+        
+        print(f"   ✅ Transcript fetched successfully ({len(full_transcript)} chars)")
+        
+        return {
+            "status": "success",
+            "transcript": full_transcript,
+            "video_id": youtube_id,
+            "language": "auto",
+            "method": "youtube-transcript-api"
+        }
+        
+    except Exception as e:
+        error_msg = str(e)
+        print(f"   ⚠️ Transcript API failed: {error_msg[:100]}")
+        return {"status": "error", "message": f"Transcript API failed: {error_msg}"}
 
 
 def download_audio(video_url: str) -> Dict[str, str]:
@@ -146,7 +207,7 @@ def transcribe_audio(file_path: str, language: str = None) -> Dict[str, str]:
 
 def process_video(video_url: str, force_refresh: bool = False) -> Dict[str, str]:
     """
-    Full pipeline: Download audio -> Transcribe.
+    Full pipeline: Try YouTube Transcript API first, fallback to Download + Whisper.
     Uses caching to avoid re-processing same videos.
     
     Args:
@@ -172,7 +233,36 @@ def process_video(video_url: str, force_refresh: bool = False) -> Dict[str, str]
             }
     
     try:
-        # Step 1: Download audio
+        # ========================================
+        # Method 1: YouTube Transcript API (fast, no download needed)
+        # ========================================
+        if HAS_TRANSCRIPT_API and extract_youtube_id(video_url):
+            print(f"📝 Trying YouTube Transcript API first...")
+            api_result = get_transcript_via_api(video_url)
+            
+            if api_result.get("status") == "success":
+                transcript = api_result["transcript"]
+                
+                # Cache the transcript
+                cache_transcript(url_hash, transcript)
+                print(f"✅ Video processed via Transcript API and cached: {url_hash}")
+                
+                return {
+                    "status": "success",
+                    "video_id": url_hash,
+                    "youtube_id": api_result.get("video_id", url_hash),
+                    "transcript": transcript,
+                    "title": f"YouTube Video ({api_result.get('video_id', 'unknown')})",
+                    "detected_language": api_result.get("language", "auto"),
+                    "cached": False,
+                    "method": "transcript-api"
+                }
+            else:
+                print(f"⚠️ Transcript API failed, falling back to yt-dlp + Whisper...")
+        
+        # ========================================
+        # Method 2: yt-dlp + Whisper (fallback)
+        # ========================================
         print(f"📥 Downloading audio from: {video_url}")
         download_result = download_audio(video_url)
         
@@ -195,9 +285,9 @@ def process_video(video_url: str, force_refresh: bool = False) -> Dict[str, str]
         
         # Step 3: Cache the transcript
         cache_transcript(url_hash, transcript)
-        print(f"✅ Video processed and cached: {url_hash}")
+        print(f"✅ Video processed via Whisper and cached: {url_hash}")
         
-        # Clean up audio file (optional)
+        # Clean up audio file
         try:
             if os.path.exists(audio_path):
                 os.remove(audio_path)
@@ -211,7 +301,8 @@ def process_video(video_url: str, force_refresh: bool = False) -> Dict[str, str]
             "transcript": transcript,
             "title": title,
             "detected_language": detected_lang,
-            "cached": False
+            "cached": False,
+            "method": "whisper"
         }
         
     except Exception as e:
