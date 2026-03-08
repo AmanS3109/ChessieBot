@@ -22,6 +22,7 @@ ffmpeg-python
 
 # Video Download
 yt-dlp
+youtube-transcript-api
 
 # Text-to-Speech
 gtts
