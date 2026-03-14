@@ -118,12 +118,15 @@ def download_audio(video_url: str) -> Dict[str, str]:
         },
     }
 
-    # Build list of option sets to try: with cookies first, then without
+    # Build list of option sets to try
+    # Skip browser cookies in production/Docker (no browsers installed)
     attempts = []
-    for browser in ['chrome', 'edge', 'firefox']:
-        opts_with_cookies = dict(base_opts)
-        opts_with_cookies['cookiesfrombrowser'] = (browser,)
-        attempts.append((f"with {browser} cookies", opts_with_cookies))
+    env = os.getenv("ENV", "development")
+    if env == "development":
+        for browser in ['chrome', 'edge', 'firefox']:
+            opts_with_cookies = dict(base_opts)
+            opts_with_cookies['cookiesfrombrowser'] = (browser,)
+            attempts.append((f"with {browser} cookies", opts_with_cookies))
     attempts.append(("without cookies", dict(base_opts)))
 
     last_error = ""
